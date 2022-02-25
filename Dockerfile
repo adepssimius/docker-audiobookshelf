@@ -13,14 +13,14 @@ ENV S6_BEHAVIOUR_IF_STAGE2_FAILS=2
 RUN \
   echo "**** install build packages ****" && \
   apk add --no-cache --virtual=build-dependencies \
-    curl \
-    npm && \
+    curl && \
   echo "**** install runtime packages ****" && \
   apk add --no-cache --upgrade \
+    ffmpeg \
     nodejs \
-    sudo && \
+    npm && \
   npm config set unsafe-perm true && \
-  echo "**** install Audiobookshelf ****" && \
+  echo "**** download latest audiobookshelf release ****" && \
   mkdir -p \
     /app/audiobookshelf && \
   if [ -z ${AUDIOBOOKSHELF_RELEASE+x} ]; then \
@@ -32,19 +32,27 @@ RUN \
     "https://github.com/advplyr/audiobookshelf/archive/${AUDIOBOOKSHELF_RELEASE}.tar.gz" && \
   tar -xzf \
     /tmp/audiobookshelf.tar.gz -C \
-    /app/audiobookshelf/ --strip-components=1 && \
-  echo "**** install node modules ****" && \
-  npm install --prefix /app/audiobookshelf && \
-  echo "**** cleanup ****" && \
-    apk del --purge \
-    build-dependencies && \
-  rm -rf \
-    /root \
-    /tmp/* && \
-  mkdir -p \
-    /root
+    /app/audiobookshelf/ --strip-components=1
+
+WORKDIR /app/audiobookshelf/client
+RUN npm install
+RUN npm run generate
+RUN mv /app/audiobookshelf/client/dist /tmp/dist
+RUN rm -rf /app/audiobookshelf/client
+RUN mkdir -p /app/audiobookshelf/client
+RUN mv /tmp/dist /app/audiobookshelf/client/
+ENV NODE_ENV=production
+WORKDIR /app/audiobookshelf
+RUN npm ci --production
+
+
+RUN \
+echo "**** cleanup ****" && \
+   apk del --purge \
+   build-dependencies
 
 # add local files
 COPY root/ /
 
 EXPOSE 80
+CMD ["npm", "start"]
